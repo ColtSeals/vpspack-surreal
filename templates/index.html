@@ -662,15 +662,11 @@
         background: rgba(251,113,133,.10);
         border-color: rgba(251,113,133,.25);
     }
-
-
-
   </style>
 </head>
 
 <body>
 <div class="vm" id="app">
-  <!-- SIDEBAR -->
   <aside class="sidebar">
     <div class="brand">
       <div class="logo"></div>
@@ -708,7 +704,6 @@
     </div>
   </aside>
 
-  <!-- MAIN -->
   <main class="main">
     <div class="topbar">
       <div class="title">
@@ -725,7 +720,6 @@
       </div>
     </div>
 
-    <!-- STATS -->
     <section class="stats">
       <div class="stat">
         <div>
@@ -752,7 +746,6 @@
       </div>
     </section>
 
-    <!-- TABLE -->
     <div class="tableWrap">
       <table>
         <thead>
@@ -773,6 +766,7 @@
         <tbody id="tbody">
           {% for u in users %}
           <tr class="row-user"
+              data-json='{{ u | tojson }}'
               data-user="{{ (u.username or '') | lower }}"
               data-name="{{ (u.name or '') | lower }}"
               data-cpf="{{ (u.cpf or '') | lower }}"
@@ -833,6 +827,8 @@
             <td>{{ u.expiration_date }}</td>
 
             <td class="actionsCell">
+              <button class="iconBtn" type="button" title="Editar" onclick='openEdit(this)'>✏️</button>
+
               <a href="/action/toggle/{{ u.uuid }}" class="iconBtn" title="Bloquear/Liberar">
                 {{ '🔒' if u.is_active else '🔓' }}
               </a>
@@ -851,10 +847,8 @@
   </main>
 </div>
 
-<!-- TOAST -->
 <div class="toast-box" id="toast-box"></div>
 
-<!-- MODAL CREATE -->
 <div class="overlay" id="modal" aria-hidden="true">
   <div class="modal" role="dialog" aria-modal="true" aria-label="Criar Novo Acesso">
     <div class="modalHead">
@@ -936,7 +930,60 @@
   </div>
 </div>
 
-<!-- MODAL DELETE -->
+<div class="overlay" id="modal-edit" aria-hidden="true">
+  <div class="modal" role="dialog" aria-modal="true" aria-label="Editar Usuário">
+    <div class="modalHead">
+      <h3>✏️ Editar: <span id="e_title_user" style="color:var(--p1)"></span></h3>
+      <button class="modalClose" type="button" onclick="closeEdit()" title="Fechar">✕</button>
+    </div>
+
+    <div class="modalBody">
+      <input type="hidden" id="e_uuid">
+
+      <div class="grid2">
+        <div class="fg">
+          <label>Nova Senha (opcional)</label>
+          <div class="ctrl">
+            🔑 <input id="e_pass" placeholder="Deixe vazio para manter" autocomplete="off" />
+          </div>
+        </div>
+
+        <div class="fg">
+           <label>Limite Conexões</label>
+           <div class="ctrl">🧷 <input id="e_limit" type="number" /></div>
+        </div>
+      </div>
+
+      <div class="fg">
+          <label>Renovar Validade (dias a somar)</label>
+          <div class="ctrl">📆 <input id="e_days" type="number" placeholder="Ex: 30 (vazio mantém data atual)" /></div>
+      </div>
+
+      <div class="grid2">
+        <div class="fg">
+          <label>Nome</label>
+          <div class="ctrl">🧾 <input id="e_name" /></div>
+        </div>
+
+        <div class="fg">
+          <label>Email</label>
+          <div class="ctrl">✉️ <input id="e_email" /></div>
+        </div>
+      </div>
+
+      <div class="fg">
+        <label>HWID</label>
+        <div class="ctrl">🧩 <input id="e_hwid" /></div>
+      </div>
+    </div>
+
+    <div class="modalFoot">
+      <button class="btn btnFull" type="button" onclick="closeEdit()">Cancelar</button>
+      <button class="btn btn-primary btnFull" type="button" onclick="saveEdit()">Salvar Alterações</button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="modal-delete" aria-hidden="true">
   <div class="modal dangerBox" role="dialog" aria-modal="true" aria-label="Excluir Usuário">
     <div class="modalHead dangerHead">
@@ -958,7 +1005,6 @@
   </div>
 </div>
 
-<!-- MODAL KICK -->
 <div class="overlay" id="modal-kick" aria-hidden="true">
   <div class="modal" role="dialog" aria-modal="true" aria-label="Derrubar conexões" style="max-width:420px;">
     <div class="modalHead">
@@ -1035,6 +1081,62 @@
     if(!document.getElementById('m_limit').value) document.getElementById('m_limit').value = 1;
     if(!document.getElementById('m_days').value) document.getElementById('m_days').value = 30;
     Toast.show('Ok', 'success', 'Campos preenchidos.');
+  }
+
+  // --- MODAL EDIT (NOVO) ---
+  const modalEdit = document.getElementById('modal-edit');
+  
+  function openEdit(btn){
+    // Pega o JSON do TR pai
+    const tr = btn.closest('tr');
+    const data = JSON.parse(tr.getAttribute('data-json'));
+    
+    // Popula campos
+    document.getElementById('e_uuid').value = data.uuid;
+    document.getElementById('e_title_user').textContent = data.username;
+    
+    document.getElementById('e_pass').value = ""; // Senha vazia p/ nao alterar
+    document.getElementById('e_limit').value = data.limit_conn;
+    document.getElementById('e_days').value = ""; // Dias vazio
+    
+    document.getElementById('e_name').value = data.name || "";
+    document.getElementById('e_email').value = data.email || "";
+    document.getElementById('e_hwid').value = data.hwid || "";
+
+    modalEdit.classList.add('open');
+    modalEdit.setAttribute('aria-hidden','false');
+  }
+
+  function closeEdit(){
+    modalEdit.classList.remove('open');
+    modalEdit.setAttribute('aria-hidden','true');
+  }
+
+  async function saveEdit(){
+    const body = {
+      uuid: document.getElementById('e_uuid').value,
+      password: document.getElementById('e_pass').value,
+      limit: document.getElementById('e_limit').value,
+      days: document.getElementById('e_days').value, // se tiver valor, soma a hoje
+      name: document.getElementById('e_name').value,
+      email: document.getElementById('e_email').value,
+      hwid: document.getElementById('e_hwid').value
+    };
+
+    try {
+      const res = await fetch('/api/update', {
+        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)
+      });
+      const json = await res.json();
+      if(json.status === 'success'){
+        Toast.show('Atualizado!', 'success');
+        setTimeout(()=>location.reload(), 800);
+      } else {
+        Toast.show('Erro', 'error', json.message);
+      }
+    } catch(e){ 
+      Toast.show('Erro de conexão', 'error'); 
+    }
   }
 
   // --- MODAL DELETE ---
@@ -1261,6 +1363,7 @@
   // Close modals on outside click
   window.onclick = function(e){
     if(e.target === modal) closeModal();
+    if(e.target === modalEdit) closeEdit();
     if(e.target === modalDel) closeDelete();
     if(e.target === modalKick) closeKick();
   }
@@ -1268,7 +1371,7 @@
   // ESC closes modals
   document.addEventListener('keydown', (e)=>{
     if(e.key === 'Escape'){
-      closeModal(); closeDelete(); closeKick();
+      closeModal(); closeEdit(); closeDelete(); closeKick();
     }
   });
 </script>
