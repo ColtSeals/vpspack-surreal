@@ -1,90 +1,240 @@
-
 <!DOCTYPE html>
 <html lang="pt">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Painel Surreal</title>
+    <title>Dashboard Surreal</title>
     <style>
-        body { background: #050505; color: #eee; font-family: 'Courier New', monospace; padding: 20px; }
-        .box { max-width: 1000px; margin: 0 auto; border: 1px solid #333; background: #111; padding: 20px; border-radius: 8px; box-shadow: 0 0 15px rgba(0,255,255,0.1); }
-        .header { display: flex; justify-content: space-between; border-bottom: 1px solid #333; padding-bottom: 10px; margin-bottom: 20px; }
-        h2 { color: #0ff; margin: 0; text-shadow: 0 0 5px #0ff; }
-        a { color: #f00; text-decoration: none; }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap');
+
+        body {
+            margin: 0;
+            padding: 40px 20px;
+            font-family: 'Inter', sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        /* Header */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 40px;
+            padding: 20px;
+            background: rgba(30, 41, 59, 0.5);
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 20px;
+            background: linear-gradient(to right, #38bdf8, #818cf8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 700;
+        }
+
+        .logout-btn {
+            color: #94a3b8;
+            text-decoration: none;
+            font-size: 14px;
+            transition: color 0.3s;
+        }
+        .logout-btn:hover { color: #f87171; }
+
+        /* Tabela Card */
+        .card {
+            background: #1e293b;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            text-align: left;
+            padding: 18px 24px;
+            color: #94a3b8;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            background: #1e293b;
+            border-bottom: 1px solid #334155;
+        }
+
+        td {
+            padding: 16px 24px;
+            border-bottom: 1px solid #334155;
+            vertical-align: middle;
+        }
+
+        tr:last-child td { border-bottom: none; }
+        tr:hover { background: #263346; }
+
+        /* Badges e Status */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
+            border-radius: 9999px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .active { background: rgba(34, 197, 94, 0.1); color: #4ade80; }
+        .blocked { background: rgba(239, 68, 68, 0.1); color: #f87171; }
+
+        /* Bolinha Online */
+        .online-dot {
+            height: 8px;
+            width: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 6px;
+            background: #475569;
+            box-shadow: 0 0 0 0 rgba(71, 85, 105, 0.7);
+        }
+        .is-online {
+            background: #4ade80;
+            box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7);
+            animation: pulse-green 2s infinite;
+        }
+        .is-full {
+            background: #f87171;
+            animation: pulse-red 2s infinite;
+        }
+
+        /* Ações */
+        .action-group { display: flex; gap: 8px; }
+        .btn-icon {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            text-decoration: none;
+            transition: all 0.2s;
+            font-size: 16px;
+        }
+        .btn-toggle { background: #334155; color: #e2e8f0; }
+        .btn-toggle:hover { background: #475569; }
         
-        table { width: 100%; border-collapse: collapse; }
-        th { text-align: left; color: #666; padding: 10px; border-bottom: 1px solid #222; }
-        td { padding: 10px; border-bottom: 1px solid #222; }
+        .btn-kick { background: rgba(234, 179, 8, 0.1); color: #facc15; }
+        .btn-kick:hover { background: rgba(234, 179, 8, 0.2); transform: scale(1.1); }
         
-        .on-tag { font-weight: bold; }
-        .green { color: #0f0; }
-        .red { color: #f00; }
-        
-        .btn { padding: 5px 10px; border: none; cursor: pointer; text-decoration: none; font-size: 12px; border-radius: 3px; }
-        .btn-kick { background: #ffcc00; color: #000; }
-        .btn-del { background: #f00; color: #fff; }
-        .btn-lock { background: #333; color: #fff; }
+        .btn-del { background: rgba(239, 68, 68, 0.1); color: #f87171; }
+        .btn-del:hover { background: rgba(239, 68, 68, 0.2); transform: scale(1.1); }
+
+        @keyframes pulse-green {
+            0% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7); }
+            70% { box-shadow: 0 0 0 6px rgba(74, 222, 128, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
+        }
     </style>
 </head>
 <body>
-    <div class="box">
-        <div class="header">
-            <h2>VPSPACK SURREAL</h2>
-            <a href="/login">[ SAIR ]</a>
+    <div class="container">
+        <header>
+            <h1>VPS SURREAL DASHBOARD</h1>
+            <a href="/login" class="logout-btn">Desconectar</a>
+        </header>
+
+        <div class="card">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Usuário</th>
+                        <th>Senha</th>
+                        <th>Conexão</th>
+                        <th>Validade</th>
+                        <th>Status</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for u in users %}
+                    <tr>
+                        <td style="font-weight: 600; color: #fff;">{{ u.username }}</td>
+                        <td style="font-family: monospace; color: #94a3b8;">{{ u.password }}</td>
+                        
+                        <td>
+                            <div style="display: flex; align-items: center;">
+                                <span id="dot-{{ u.username }}" class="online-dot"></span>
+                                <span style="font-variant-numeric: tabular-nums;">
+                                    <b id="count-{{ u.username }}" style="color: #fff">...</b>
+                                    <span style="color: #64748b; font-size: 12px;"> / {{ u.limit_conn }}</span>
+                                </span>
+                            </div>
+                        </td>
+
+                        <td>{{ u.expiration_date }}</td>
+                        
+                        <td>
+                            {% if u.is_active %}
+                            <span class="status-badge active">Ativo</span>
+                            {% else %}
+                            <span class="status-badge blocked">Bloqueado</span>
+                            {% endif %}
+                        </td>
+                        
+                        <td>
+                            <div class="action-group">
+                                <a href="/action/toggle/{{ u.uuid }}" class="btn-icon btn-toggle" title="Bloquear/Desbloquear">
+                                    {{ '🔒' if u.is_active else '🔓' }}
+                                </a>
+                                <a href="/action/kick/{{ u.username }}" class="btn-icon btn-kick" title="Derrubar Conexões">⚡</a>
+                                <a href="/action/delete/{{ u.uuid }}" class="btn-icon btn-del" title="Excluir" onclick="return confirm('Tem certeza que deseja excluir {{ u.username }}?')">🗑️</a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
-        <table>
-            <thead>
-                <tr>
-                    <th>USUARIO</th>
-                    <th>SENHA</th>
-                    <th>ONLINE</th>
-                    <th>VALIDADE</th>
-                    <th>STATUS</th>
-                    <th>AÇÕES</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for u in users %}
-                <tr>
-                    <td>{{ u.username }}</td>
-                    <td style="color:#555">{{ u.password }}</td>
-                    <td>
-                        <span id="on-{{u.username}}" class="on-tag">...</span> / {{ u.limit_conn }}
-                    </td>
-                    <td>{{ u.expiration_date }}</td>
-                    <td>
-                        <a href="/action/toggle/{{ u.uuid }}" class="btn btn-lock">
-                            {{ 'ATIVO' if u.is_active else 'BLOQ' }}
-                        </a>
-                    </td>
-                    <td>
-                        <a href="/action/kick/{{ u.username }}" class="btn btn-kick" title="Derrubar">⚡</a>
-                        <a href="/action/delete/{{ u.uuid }}" class="btn btn-del" onclick="return confirm('Apagar?')">X</a>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
     </div>
 
     <script>
-        // Mágica do Monitoramento em Tempo Real
-        async function update() {
+        async function updateMonitor() {
             try {
-                let res = await fetch('/api/online');
-                let data = await res.json();
-                data.forEach(item => {
-                    let el = document.getElementById('on-' + item.user);
-                    if(el) {
-                        el.innerText = item.online;
-                        el.className = (item.online > 0) ? 'on-tag green' : 'on-tag';
-                        if(item.online >= item.limit) el.className = 'on-tag red';
+                const response = await fetch('/api/online');
+                const data = await response.json();
+                
+                data.forEach(user => {
+                    // Atualiza Numero
+                    const countEl = document.getElementById('count-' + user.user);
+                    if (countEl) countEl.innerText = user.online;
+
+                    // Atualiza Bolinha
+                    const dotEl = document.getElementById('dot-' + user.user);
+                    if (dotEl) {
+                        if (user.online >= user.limit) {
+                            dotEl.className = 'online-dot is-full'; // Vermelho piscando
+                        } else if (user.online > 0) {
+                            dotEl.className = 'online-dot is-online'; // Verde piscando
+                        } else {
+                            dotEl.className = 'online-dot'; // Cinza parado
+                        }
                     }
                 });
-            } catch(e) {}
+            } catch (e) { console.error(e); }
         }
-        setInterval(update, 2000); // Atualiza a cada 2 seg
-        update();
+
+        // Atualiza a cada 2 segundos
+        setInterval(updateMonitor, 2000);
+        updateMonitor();
     </script>
 </body>
 </html>
