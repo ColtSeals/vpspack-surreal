@@ -633,6 +633,38 @@
       .search{ min-width: unset; }
       .grid2, .grid3{ grid-template-columns: 1fr; }
     }
+
+    .statusTag{
+        display:inline-flex;
+        align-items:center;
+        gap:8px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(255,255,255,.14);
+        background: rgba(255,255,255,.06);
+        font-size: 12px;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    .statusTag .dot{
+        width:8px;height:8px;border-radius:999px;background: currentColor;
+        box-shadow: 0 0 0 4px rgba(255,255,255,.08);
+    }
+
+    .statusTag.on{
+        color: var(--ok);
+        background: rgba(34,197,94,.10);
+        border-color: rgba(34,197,94,.25);
+    }
+    .statusTag.off{
+        color: var(--danger);
+        background: rgba(251,113,133,.10);
+        border-color: rgba(251,113,133,.25);
+    }
+
+
+
   </style>
 </head>
 
@@ -730,6 +762,7 @@
             <th>CPF</th>
             <th>Email</th>
             <th>HWID</th>
+            <th>Status</th>
             <th>Monitor</th>
             <th>Vencimento</th>
             <th style="text-align:right">Ações</th>
@@ -780,7 +813,15 @@
               {% endif %}
             </td>
 
-            <td>
+              <td>
+                  <div class="statusTag {{ 'on' if u.is_active else 'off' }}">
+                      <span class="dot"></span>
+                      {{ 'ATIVO' if u.is_active else 'BLOQ' }}
+                  </div>
+              </td>
+
+
+              <td>
               <div id="badge-{{ u.username }}" class="badge off">
                 <span class="dot"></span>
                 <span id="count-{{ u.username }}">0</span>
