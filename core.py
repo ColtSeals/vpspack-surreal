@@ -75,7 +75,17 @@ def sys_create_user(username, password):
     if IS_WINDOWS:
         return True
     try:
-        subprocess.run(['useradd', '-M', '-s', '/bin/false', username], check=True)
+        # Tenta criar. Se falhar, assume que ja existe e so troca a senha
+        subprocess.run(['useradd', '-M', '-s', '/bin/false', username], stderr=subprocess.DEVNULL)
+        sys_change_password(username, password)
+        return True
+    except:
+        return False
+
+def sys_change_password(username, password):
+    if IS_WINDOWS:
+        return True
+    try:
         p = subprocess.Popen(['chpasswd'], stdin=subprocess.PIPE)
         p.communicate(input=f"{username}:{password}".encode())
         return True
