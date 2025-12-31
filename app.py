@@ -22,6 +22,7 @@ def is_expired(expiration_date: str) -> bool:
     return expiration_date < today
 
 def user_to_dict(u):
+    # Helper para converter linha do banco em dict seguro
     return {
         "uuid": u["uuid"],
         "username": u["username"],
@@ -86,7 +87,7 @@ def api_token_required(f):
     return decorated_function
 
 # -----------------------------
-# API: UPDATE USER (ADMIN) - NOVO
+# API: UPDATE USER (ADMIN) - FIX
 # -----------------------------
 @app.route('/api/update', methods=['POST'])
 @login_required_api
@@ -94,7 +95,6 @@ def api_update():
     data = request.json or {}
     
     uuid_user = data.get('uuid')
-    username = data.get('username') # apenas para seguranca/check
     
     if not uuid_user:
         return jsonify({'status': 'error', 'message': 'UUID necessario'}), 400
@@ -128,7 +128,8 @@ def api_update():
     if add_days:
         try:
             d = int(add_days)
-            if d > 0:
+            # Se digitou dias, calcula nova data. Se for 0 ou vazio, ignora.
+            if d != 0: 
                 final_exp = (datetime.now() + timedelta(days=d)).strftime('%Y-%m-%d')
         except: pass
 
@@ -139,16 +140,18 @@ def api_update():
         sys_change_password(curr['username'], new_pass)
 
     # Atualiza DB
-    conn.execute('''
-        UPDATE users SET 
-        password=?, name=?, email=?, hwid=?, limit_conn=?, expiration_date=?
-        WHERE uuid=?
-    ''', (final_pass, final_name, final_email, final_hwid, final_limit, final_exp, uuid_user))
-    
-    conn.commit()
-    conn.close()
-    
-    return jsonify({'status': 'success', 'message': 'Dados atualizados!'})
+    try:
+        conn.execute('''
+            UPDATE users SET 
+            password=?, name=?, email=?, hwid=?, limit_conn=?, expiration_date=?
+            WHERE uuid=?
+        ''', (final_pass, final_name, final_email, final_hwid, final_limit, final_exp, uuid_user))
+        conn.commit()
+        return jsonify({'status': 'success', 'message': 'Dados atualizados!'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+    finally:
+        conn.close()
 
 
 # -----------------------------
@@ -320,8 +323,14 @@ def logout():
 @login_required_page
 def index():
     conn = get_db()
-    users = conn.execute('SELECT * FROM users').fetchall()
+    rows = conn.execute('SELECT * FROM users').fetchall()
     conn.close()
+    
+    # --- CORREÇÃO DO ERRO 500 ---
+    # Convertemos as linhas do SQLite (sqlite3.Row) para dicionários Python puros.
+    # Isso permite que o comando 'tojson' no HTML funcione corretamente.
+    users = [dict(ix) for ix in rows]
+    
     return render_template('index.html', users=users)
 
 @app.route('/action/kick/<username>')
