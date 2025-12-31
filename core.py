@@ -15,16 +15,22 @@ def get_db():
     conn.row_factory = sqlite3.Row
     return conn
 
+def _column_exists(conn, table, column):
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    cols = [r["name"] for r in rows]
+    return column in cols
+
 def init_db():
     conn = get_db()
     c = conn.cursor()
-    # NOVA TABELA COM TODOS OS DADOS
+
+    # Tabela base
     c.execute('''CREATE TABLE IF NOT EXISTS users (
         uuid TEXT PRIMARY KEY,
         username TEXT UNIQUE NOT NULL,  -- Login SSH (Sistema Linux)
         password TEXT NOT NULL,
         name TEXT,                      -- Nome do Cliente
-        cpf TEXT UNIQUE,                -- Login do Painel WEB
+        cpf TEXT UNIQUE,                -- Login do Painel WEB (opcional)
         email TEXT,
         hwid TEXT,
         limit_conn INTEGER DEFAULT 1,
@@ -32,12 +38,23 @@ def init_db():
         is_active BOOLEAN DEFAULT 1
     )''')
     conn.commit()
+
+    # Migracao: adiciona colunas novas se nao existirem
+    if not _column_exists(conn, "users", "api_token"):
+        c.execute("ALTER TABLE users ADD COLUMN api_token TEXT")
+        conn.commit()
+
+    if not _column_exists(conn, "users", "token_created_at"):
+        c.execute("ALTER TABLE users ADD COLUMN token_created_at TEXT")
+        conn.commit()
+
     conn.close()
 
-# --- FUNÇÕES DO SISTEMA (LINUX) ---
+# --- FUNCOES DO SISTEMA (LINUX) ---
 
 def sys_count_online(username):
-    if IS_WINDOWS: return 0 
+    if IS_WINDOWS:
+        return 0
     try:
         cmd = f"pgrep -c -u {username} sshd"
         result = subprocess.check_output(cmd, shell=True)
@@ -46,32 +63,38 @@ def sys_count_online(username):
         return 0
 
 def sys_kill_user(username):
-    if IS_WINDOWS: return True
+    if IS_WINDOWS:
+        return True
     try:
         subprocess.run(['pkill', '-u', username], stderr=subprocess.DEVNULL)
         return True
-    except: return False
+    except:
+        return False
 
 def sys_create_user(username, password):
-    if IS_WINDOWS: return True
+    if IS_WINDOWS:
+        return True
     try:
-        # Cria usuario Linux (SSH)
         subprocess.run(['useradd', '-M', '-s', '/bin/false', username], check=True)
         p = subprocess.Popen(['chpasswd'], stdin=subprocess.PIPE)
         p.communicate(input=f"{username}:{password}".encode())
         return True
-    except: return False
+    except:
+        return False
 
 def sys_delete_user(username):
-    if IS_WINDOWS: return True
+    if IS_WINDOWS:
+        return True
     try:
         sys_kill_user(username)
         subprocess.run(['userdel', '-r', username], check=True)
         return True
-    except: return False
+    except:
+        return False
 
 def sys_toggle_user(username, active):
-    if IS_WINDOWS: return True
+    if IS_WINDOWS:
+        return True
     try:
         if active:
             subprocess.run(['passwd', '-u', username])
@@ -79,4 +102,5 @@ def sys_toggle_user(username, active):
             subprocess.run(['passwd', '-l', username])
             sys_kill_user(username)
         return True
-    except: return False
+    except:
+        return False
