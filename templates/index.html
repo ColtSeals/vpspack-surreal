@@ -1,1 +1,90 @@
 
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel Surreal</title>
+    <style>
+        body { background: #050505; color: #eee; font-family: 'Courier New', monospace; padding: 20px; }
+        .box { max-width: 1000px; margin: 0 auto; border: 1px solid #333; background: #111; padding: 20px; border-radius: 8px; box-shadow: 0 0 15px rgba(0,255,255,0.1); }
+        .header { display: flex; justify-content: space-between; border-bottom: 1px solid #333; padding-bottom: 10px; margin-bottom: 20px; }
+        h2 { color: #0ff; margin: 0; text-shadow: 0 0 5px #0ff; }
+        a { color: #f00; text-decoration: none; }
+        
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; color: #666; padding: 10px; border-bottom: 1px solid #222; }
+        td { padding: 10px; border-bottom: 1px solid #222; }
+        
+        .on-tag { font-weight: bold; }
+        .green { color: #0f0; }
+        .red { color: #f00; }
+        
+        .btn { padding: 5px 10px; border: none; cursor: pointer; text-decoration: none; font-size: 12px; border-radius: 3px; }
+        .btn-kick { background: #ffcc00; color: #000; }
+        .btn-del { background: #f00; color: #fff; }
+        .btn-lock { background: #333; color: #fff; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <div class="header">
+            <h2>VPSPACK SURREAL</h2>
+            <a href="/login">[ SAIR ]</a>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>USUARIO</th>
+                    <th>SENHA</th>
+                    <th>ONLINE</th>
+                    <th>VALIDADE</th>
+                    <th>STATUS</th>
+                    <th>AÇÕES</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for u in users %}
+                <tr>
+                    <td>{{ u.username }}</td>
+                    <td style="color:#555">{{ u.password }}</td>
+                    <td>
+                        <span id="on-{{u.username}}" class="on-tag">...</span> / {{ u.limit_conn }}
+                    </td>
+                    <td>{{ u.expiration_date }}</td>
+                    <td>
+                        <a href="/action/toggle/{{ u.uuid }}" class="btn btn-lock">
+                            {{ 'ATIVO' if u.is_active else 'BLOQ' }}
+                        </a>
+                    </td>
+                    <td>
+                        <a href="/action/kick/{{ u.username }}" class="btn btn-kick" title="Derrubar">⚡</a>
+                        <a href="/action/delete/{{ u.uuid }}" class="btn btn-del" onclick="return confirm('Apagar?')">X</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        // Mágica do Monitoramento em Tempo Real
+        async function update() {
+            try {
+                let res = await fetch('/api/online');
+                let data = await res.json();
+                data.forEach(item => {
+                    let el = document.getElementById('on-' + item.user);
+                    if(el) {
+                        el.innerText = item.online;
+                        el.className = (item.online > 0) ? 'on-tag green' : 'on-tag';
+                        if(item.online >= item.limit) el.className = 'on-tag red';
+                    }
+                });
+            } catch(e) {}
+        }
+        setInterval(update, 2000); // Atualiza a cada 2 seg
+        update();
+    </script>
+</body>
+</html>
