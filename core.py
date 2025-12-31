@@ -1,4 +1,3 @@
-
 import sqlite3
 import subprocess
 import os
@@ -19,10 +18,15 @@ def get_db():
 def init_db():
     conn = get_db()
     c = conn.cursor()
+    # NOVA TABELA COM TODOS OS DADOS
     c.execute('''CREATE TABLE IF NOT EXISTS users (
         uuid TEXT PRIMARY KEY,
-        username TEXT UNIQUE NOT NULL,
+        username TEXT UNIQUE NOT NULL,  -- Login SSH (Sistema Linux)
         password TEXT NOT NULL,
+        name TEXT,                      -- Nome do Cliente
+        cpf TEXT UNIQUE,                -- Login do Painel WEB
+        email TEXT,
+        hwid TEXT,
         limit_conn INTEGER DEFAULT 1,
         expiration_date DATE,
         is_active BOOLEAN DEFAULT 1
@@ -33,10 +37,8 @@ def init_db():
 # --- FUNÇÕES DO SISTEMA (LINUX) ---
 
 def sys_count_online(username):
-    """Conta conexões ativas (SSH/Dropbear/OpenVPN)"""
     if IS_WINDOWS: return 0 
     try:
-        # Conta quantos processos 'sshd' este usuário tem
         cmd = f"pgrep -c -u {username} sshd"
         result = subprocess.check_output(cmd, shell=True)
         return int(result.strip())
@@ -44,7 +46,6 @@ def sys_count_online(username):
         return 0
 
 def sys_kill_user(username):
-    """Expulsa o usuário (Derruba conexões)"""
     if IS_WINDOWS: return True
     try:
         subprocess.run(['pkill', '-u', username], stderr=subprocess.DEVNULL)
@@ -54,7 +55,7 @@ def sys_kill_user(username):
 def sys_create_user(username, password):
     if IS_WINDOWS: return True
     try:
-        # Cria sem shell para tunelamento
+        # Cria usuario Linux (SSH)
         subprocess.run(['useradd', '-M', '-s', '/bin/false', username], check=True)
         p = subprocess.Popen(['chpasswd'], stdin=subprocess.PIPE)
         p.communicate(input=f"{username}:{password}".encode())
@@ -75,7 +76,7 @@ def sys_toggle_user(username, active):
         if active:
             subprocess.run(['passwd', '-u', username])
         else:
-            subprocess.run(['passwd', '-l', username]) # Trava senha
-            sys_kill_user(username) # Derruba quem ta on
+            subprocess.run(['passwd', '-l', username])
+            sys_kill_user(username)
         return True
     except: return False
