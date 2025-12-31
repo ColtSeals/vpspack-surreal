@@ -696,10 +696,11 @@
         <span class="chip" id="ping">—</span>
       </a>
 
-      <a class="btn danger-link" href="/login">
+      <a class="btn danger-link" href="/logout">
         <span class="left">🚪 Sair</span>
         <span class="chip">Logout</span>
       </a>
+
     </div>
 
     <div style="margin-top:14px; color: var(--muted); font-size:12px; line-height:1.5">
@@ -1141,7 +1142,7 @@
   }
 
   // --- CREATE USER (refatorado para CPF/NAME/EMAIL/HWID) ---
-  async function criarUser(){
+ async function criarUser(){
     const username = document.getElementById('m_user').value.trim();
     const password = document.getElementById('m_pass').value.trim();
     const name = document.getElementById('m_name').value.trim();
@@ -1182,7 +1183,15 @@
         body: JSON.stringify({ username, password, cpf, name, email, hwid, limit, days })
       });
 
-      const json = await res.json().catch(()=> ({}));
+      let json = {};
+      try { json = await res.json(); } catch(e) { json = {}; }
+
+      // ✅ se não estiver logado, volta pro login
+      if(res.status === 401){
+        const to = (json && json.redirect) ? json.redirect : '/login';
+        window.location.href = to;
+        return;
+      }
 
       if(res.ok && json.status === 'success'){
         Toast.show('Usuário criado', 'success', 'Atualizando...');
@@ -1199,12 +1208,21 @@
     }
   }
 
-  // --- MONITORAMENTO ---
+  // ✅ recomendo também tratar 401 no monitorNow, pra não quebrar json quando sessão cair
   async function monitorNow(){
     const ping = document.getElementById('ping');
     try{
       const t0 = performance.now();
       const r = await fetch('/api/online');
+
+      // se perdeu sessão
+      if(r.status === 401){
+        let j = {};
+        try{ j = await r.json(); }catch(e){}
+        window.location.href = (j.redirect || '/login');
+        return;
+      }
+
       const data = await r.json();
 
       let onlineTotal = 0;
