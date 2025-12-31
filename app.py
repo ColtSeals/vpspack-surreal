@@ -7,34 +7,47 @@ app.secret_key = 'CHAVE_ULTRA_SECRETA_MUDE_ISSO'
 
 init_db()
 
-# --- API PUBLICA (Para Bots/Integrações) ---
+# --- API PUBLICA (Criação Completa) ---
 @app.route('/api/create', methods=['POST'])
 def api_create():
     data = request.json
-    username = data.get('username')
+    
+    # Dados obrigatórios
+    username = data.get('username') # SSH User
     password = data.get('password')
+    cpf = data.get('cpf')
+    
+    # Dados opcionais
+    name = data.get('name', '')
+    email = data.get('email', '')
+    hwid = data.get('hwid', '')
     limit = data.get('limit', 1)
     days = data.get('days', 30)
 
-    # Cria no Linux
+    if not username or not password or not cpf:
+        return jsonify({'status': 'error', 'message': 'Campos SSH User, Senha e CPF são obrigatórios'}), 400
+
+    # Cria no Linux (Apenas o usuário SSH existe no Linux)
     if sys_create_user(username, password):
-        # Salva no Banco
+        # Salva no Banco com dados completos
         expiry = (datetime.now() + timedelta(days=int(days))).strftime('%Y-%m-%d')
         conn = get_db()
         try:
-            conn.execute('INSERT INTO users VALUES (?,?,?,?,?,?)',
-                         (str(uuid.uuid4()), username, password, limit, expiry, 1))
+            conn.execute('''
+                INSERT INTO users (uuid, username, password, name, cpf, email, hwid, limit_conn, expiration_date, is_active) 
+                VALUES (?,?,?,?,?,?,?,?,?,?)
+            ''', (str(uuid.uuid4()), username, password, name, cpf, email, hwid, limit, expiry, 1))
             conn.commit()
-            return jsonify({'status': 'success', 'data': {'username': username, 'exp': expiry}})
-        except:
-            return jsonify({'status': 'error', 'message': 'User exists'}), 409
+            return jsonify({'status': 'success'})
+        except Exception as e:
+            return jsonify({'status': 'error', 'message': 'Erro: Usuário ou CPF já existe'}), 409
         finally:
             conn.close()
-    return jsonify({'status': 'error', 'message': 'System error'}), 500
+    
+    return jsonify({'status': 'error', 'message': 'Erro ao criar no sistema Linux'}), 500
 
 @app.route('/api/online', methods=['GET'])
 def api_online():
-    # Rota leve para o painel ficar consultando
     if not session.get('logged_in'): return jsonify([])
     conn = get_db()
     users = conn.execute('SELECT username, limit_conn FROM users').fetchall()
@@ -50,9 +63,26 @@ def api_online():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        if request.form['username'] == 'admin' and request.form['password'] == 'admin':
+        cpf = request.form['username'] # O form envia name='username' mas tratamos como CPF ou ADMIN
+        password = request.form['password']
+        
+        # Login Admin Master
+        if cpf == 'admin' and password == 'admin':
             session['logged_in'] = True
             return redirect('/')
+            
+        # Login Cliente (Pelo CPF)
+        conn = get_db()
+        user = conn.execute('SELECT * FROM users WHERE cpf = ? AND password = ?', (cpf, password)).fetchone()
+        conn.close()
+        
+        if user:
+            # Se quiser fazer painel pro cliente no futuro, redireciona aqui.
+            # Por enquanto, só admin entra no painel de gestão.
+            return render_template('login.html', error="Painel apenas para Admin (por enquanto)")
+        
+        return render_template('login.html', error="CPF ou Senha incorretos")
+
     return render_template('login.html')
 
 @app.route('/')
