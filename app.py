@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, redirect, session, jsonify
 from functools import wraps
+from datetime import datetime, timedelta
 from core import *
 import uuid
 
@@ -15,7 +16,6 @@ def only_digits(s: str) -> str:
     return "".join(ch for ch in (s or "") if ch.isdigit())
 
 def is_expired(expiration_date: str) -> bool:
-    # expiration_date: 'YYYY-MM-DD'
     if not expiration_date:
         return False
     today = datetime.now().strftime("%Y-%m-%d")
@@ -38,14 +38,29 @@ def user_to_dict(u):
 # -----------------------------
 # Decorators
 # -----------------------------
-def login_required(f):
-    # usado APENAS para painel web (admin)
+def login_required_page(f):
     @wraps(f)
-    def decorated_function(*args, **kwargs):
+    def decorated(*args, **kwargs):
         if not session.get('logged_in'):
             return redirect('/login')
         return f(*args, **kwargs)
-    return decorated_function
+    return decorated
+
+def login_required_api(f):
+    """
+    Para endpoints consumidos via fetch().
+    Não devolve HTML (redirect), devolve JSON 401 com redirect.
+    """
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get('logged_in'):
+            return jsonify({
+                "status": "error",
+                "message": "Nao autorizado",
+                "redirect": "/login"
+            }), 401
+        return f(*args, **kwargs)
+    return decorated
 
 def api_token_required(f):
     @wraps(f)
@@ -65,7 +80,6 @@ def api_token_required(f):
         if not u:
             return jsonify({"status": "error", "message": "Token invalido"}), 401
 
-        # regras de bloqueio/validade (reforco)
         if not u["is_active"]:
             return jsonify({"status": "error", "message": "Conta bloqueada/pendente"}), 403
         if is_expired(u["expiration_date"] or ""):
@@ -76,9 +90,58 @@ def api_token_required(f):
     return decorated_function
 
 # -----------------------------
-# API: CREATE (semi-aberta)
+# API (APP): REGISTER PENDENTE (PUBLICO)
+# cria sempre BLOQUEADO e 0 dias
+# -----------------------------
+@app.route('/api/register', methods=['POST'])
+def api_register():
+    data = request.json or {}
+
+    username = (data.get('username') or "").strip()
+    password = (data.get('password') or "")
+    cpf = only_digits(data.get('cpf') or "")
+
+    name = (data.get('name') or "").strip()
+    email = (data.get('email') or "").strip()
+    hwid = (data.get('hwid') or "").strip()
+
+    if not username or not password or not cpf:
+        return jsonify({'status': 'error', 'message': 'Campos SSH User, Senha e CPF sao obrigatorios'}), 400
+
+    # SEMPRE pendente
+    status_ativo = 0
+    dias_validade = 0
+    limite_conn = 1
+
+    if sys_create_user(username, password):
+        sys_toggle_user(username, False)  # bloqueia no linux
+
+        expiry = (datetime.now() + timedelta(days=dias_validade)).strftime('%Y-%m-%d')
+
+        conn = get_db()
+        try:
+            conn.execute('''
+                INSERT INTO users (uuid, username, password, name, cpf, email, hwid, limit_conn, expiration_date, is_active)
+                VALUES (?,?,?,?,?,?,?,?,?,?)
+            ''', (str(uuid.uuid4()), username, password, name, cpf, email, hwid, limite_conn, expiry, status_ativo))
+            conn.commit()
+            return jsonify({'status': 'success', 'message': 'Cadastro realizado! Aguarde aprovacao.'})
+        except:
+            try:
+                sys_delete_user(username)
+            except:
+                pass
+            return jsonify({'status': 'error', 'message': 'Usuario ou CPF ja existe'}), 409
+        finally:
+            conn.close()
+
+    return jsonify({'status': 'error', 'message': 'Erro ao criar no sistema Linux'}), 500
+
+# -----------------------------
+# API (ADMIN WEB): CREATE (SOMENTE LOGADO)
 # -----------------------------
 @app.route('/api/create', methods=['POST'])
+@login_required_api
 def api_create():
     data = request.json or {}
 
@@ -93,20 +156,12 @@ def api_create():
     if not username or not password or not cpf:
         return jsonify({'status': 'error', 'message': 'Campos SSH User, Senha e CPF sao obrigatorios'}), 400
 
-    # Permissao: se admin web estiver logado, cria ativo com parametros
-    if session.get('logged_in'):
-        status_ativo = 1
-        dias_validade = int(data.get('days', 30))
-        limite_conn = int(data.get('limit', 1))
-    else:
-        status_ativo = 0
-        dias_validade = 0
-        limite_conn = 1
+    # ADMIN cria ATIVO com parametros
+    status_ativo = 1
+    dias_validade = int(data.get('days', 30))
+    limite_conn = int(data.get('limit', 1))
 
     if sys_create_user(username, password):
-        if status_ativo == 0:
-            sys_toggle_user(username, False)
-
         expiry = (datetime.now() + timedelta(days=dias_validade)).strftime('%Y-%m-%d')
 
         conn = get_db()
@@ -117,11 +172,9 @@ def api_create():
             ''', (str(uuid.uuid4()), username, password, name, cpf, email, hwid, limite_conn, expiry, status_ativo))
             conn.commit()
 
-            msg = 'Usuario criado com sucesso!' if status_ativo else 'Cadastro realizado! Aguarde aprovacao.'
-            return jsonify({'status': 'success', 'message': msg})
+            return jsonify({'status': 'success', 'message': 'Usuario criado com sucesso!'})
 
-        except Exception as e:
-            # rollback do Linux user se duplicar no DB
+        except:
             try:
                 sys_delete_user(username)
             except:
@@ -134,13 +187,12 @@ def api_create():
 
 # -----------------------------
 # API: LOGIN (APP)
-# - aceita username OU cpf no campo "login"
 # -----------------------------
 @app.route('/api/login', methods=['POST'])
 def api_login():
     data = request.json or {}
 
-    login_value = (data.get("login") or "").strip()  # pode ser username ou cpf
+    login_value = (data.get("login") or "").strip()
     password = (data.get("password") or "")
     hwid = (data.get("hwid") or "").strip()
 
@@ -149,7 +201,6 @@ def api_login():
 
     conn = get_db()
 
-    # Se for CPF (11 digitos), loga por cpf; senao por username
     digits = only_digits(login_value)
     if len(digits) == 11:
         u = conn.execute("SELECT * FROM users WHERE cpf = ? AND password = ?", (digits, password)).fetchone()
@@ -168,13 +219,10 @@ def api_login():
         conn.close()
         return jsonify({"status": "error", "message": "Conta expirada"}), 403
 
-    # Regra HWID:
-    # - se ja tem hwid salvo e o app enviar outro -> bloqueia
     if (u["hwid"] or "") and hwid and (u["hwid"] != hwid):
         conn.close()
         return jsonify({"status": "error", "message": "HWID nao autorizado"}), 403
 
-    # - se nao tem hwid salvo e app enviar, salva 1a vez
     if not (u["hwid"] or "") and hwid:
         conn.execute("UPDATE users SET hwid = ? WHERE uuid = ?", (hwid, u["uuid"]))
         conn.commit()
@@ -208,7 +256,7 @@ def api_profile():
     })
 
 # -----------------------------
-# API: LOGOUT (APP) - opcional
+# API: LOGOUT (APP)
 # -----------------------------
 @app.route('/api/logout', methods=['POST'])
 @api_token_required
@@ -224,7 +272,7 @@ def api_logout():
 # API: ONLINE (ADMIN WEB)
 # -----------------------------
 @app.route('/api/online', methods=['GET'])
-@login_required
+@login_required_api
 def api_online():
     conn = get_db()
     users = conn.execute('SELECT username, limit_conn FROM users').fetchall()
@@ -241,18 +289,23 @@ def api_online():
 # -----------------------------
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    # se já tá logado, não fica “parecendo” deslogado
+    if request.method == 'GET' and session.get('logged_in'):
+        return redirect('/')
+
     if request.method == 'POST':
         login_input = request.form['username']
         password = request.form['password']
 
-        # admin fixo (troque isso depois!)
         if login_input == 'admin' and password == 'admin':
             session['logged_in'] = True
             return redirect('/')
 
-        # cliente ainda nao tem painel web (mantive seu comportamento)
         conn = get_db()
-        user = conn.execute('SELECT * FROM users WHERE cpf = ? AND password = ?', (only_digits(login_input), password)).fetchone()
+        user = conn.execute(
+            'SELECT * FROM users WHERE cpf = ? AND password = ?',
+            (only_digits(login_input), password)
+        ).fetchone()
         conn.close()
 
         if user:
@@ -265,10 +318,18 @@ def login():
     return render_template('login.html')
 
 # -----------------------------
+# WEB LOGOUT (ADMIN)  ✅ AQUI É O PULO DO GATO
+# -----------------------------
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect('/login')
+
+# -----------------------------
 # WEB ADMIN HOME
 # -----------------------------
 @app.route('/')
-@login_required
+@login_required_page
 def index():
     conn = get_db()
     users = conn.execute('SELECT * FROM users').fetchall()
@@ -276,13 +337,13 @@ def index():
     return render_template('index.html', users=users)
 
 @app.route('/action/kick/<username>')
-@login_required
+@login_required_page
 def action_kick(username):
     sys_kill_user(username)
     return redirect('/')
 
 @app.route('/action/toggle/<uuid>')
-@login_required
+@login_required_page
 def action_toggle(uuid):
     conn = get_db()
     u = conn.execute('SELECT * FROM users WHERE uuid=?', (uuid,)).fetchone()
@@ -296,7 +357,7 @@ def action_toggle(uuid):
     return redirect('/')
 
 @app.route('/action/delete/<uuid>')
-@login_required
+@login_required_page
 def action_delete(uuid):
     conn = get_db()
     u = conn.execute('SELECT * FROM users WHERE uuid=?', (uuid,)).fetchone()
